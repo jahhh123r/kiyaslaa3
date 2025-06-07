@@ -1,0 +1,59 @@
+# İş akışının adı
+name: GSM Scraper Workflow
+
+# Bu iş akışını ne zaman çalıştıracağımızı belirler
+on:
+  # 1. GitHub arayüzünden manuel olarak tetiklemeyi sağlar ("Actions" sekmesinden)
+  workflow_dispatch:
+
+  # 2. Zamanlanmış görev (cron job) - her Pazar sabah 5:30'da çalışır
+  schedule:
+    - cron: '30 5 * * 0'
+
+jobs:
+  scrape:
+    # İşlemlerin çalışacağı sanal makine (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      # Adım 1: Depodaki kodları (scraper.py, linkler.txt vb.) sanal makineye kopyala
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Adım 2: Python'u kur
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # İstediğiniz bir Python sürümünü kullanabilirsiniz
+          python-version: '3.10'
+
+      # Adım 3: Gerekli kütüphaneleri requirements.txt dosyasından yükle
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Adım 4: Python script'ini çalıştır
+      # 'PHP_SAVE_URL' ortam değişkenini GitHub Secrets'tan alarak script'e verir
+      - name: Run the scraper script
+        env:
+          PHP_SAVE_URL: ${{ secrets.PHP_SAVE_URL }}
+        run: python scraper.py
+
+      # Adım 5: Değişen dosyaları (güncellenen linkler.txt ve loglar) depoya geri yükle (commit)
+      - name: Commit and push if there are changes
+        run: |
+          # Git için bot kullanıcısını yapılandır
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Tüm değişen ve yeni dosyaları ekle
+          git add .
+          
+          # Sadece gerçekten bir değişiklik varsa commit at ve push'la
+          if ! git diff --staged --quiet; then
+            git commit -m "BOT: Update linkler.txt and logs after scraping"
+            git push
+          else
+            echo "No changes to commit."
+          fi
